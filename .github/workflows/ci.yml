@@ -1,0 +1,61 @@
+name: CI
+
+# Testy prywatnego kodu studia (main) co godzinę, tylko gdy pojawił się nowy commit (znacznik w cache).
+# Wynik szczegółowy: zgłoszenie w prywatnym repo przy błędzie; publiczny log pokazuje tylko status.
+on:
+  schedule:
+    - cron: "41 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: qberto1988/deephouse-studio
+          ref: main
+          token: ${{ secrets.STUDIO_REPO_TOKEN }}
+          path: studio
+      - name: Commit
+        id: sha
+        run: echo "sha=$(git -C studio rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Juz przetestowany?
+        id: done
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/ci-ok
+          key: ci-ok-${{ steps.sha.outputs.sha }}
+          lookup-only: true
+      - name: ffmpeg
+        if: steps.done.outputs.cache-hit != 'true'
+        run: sudo apt-get -qq update > /dev/null && sudo apt-get -qq -o Acquire::Retries=5 install -y ffmpeg > /dev/null
+      - uses: astral-sh/setup-uv@v6
+        if: steps.done.outputs.cache-hit != 'true'
+      - name: Ruff i testy
+        if: steps.done.outputs.cache-hit != 'true'
+        working-directory: studio
+        env:
+          GH_TOKEN: ${{ secrets.STUDIO_REPO_TOKEN }}
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          if { uv sync --locked && uv run ruff check . && uv run pytest -q; } > /tmp/ci.log 2>&1; then
+            mkdir -p /tmp/ci-ok && echo ok > /tmp/ci-ok/ok; echo "testy OK"
+          else
+            { echo "CI nieudane dla ${SHA}"; echo; echo '```'; tail -c 60000 /tmp/ci.log; echo '```'; } > /tmp/body.md
+            gh issue create --repo qberto1988/deephouse-studio --title "CI nieudane (${SHA:0:7})" --body-file /tmp/body.md > /dev/null
+            echo "testy nieudane - zgloszenie w prywatnym repo"; exit 1
+          fi
+      - uses: actions/cache/save@v4
+        if: steps.done.outputs.cache-hit != 'true' && success()
+        with:
+          path: /tmp/ci-ok
+          key: ci-ok-${{ steps.sha.outputs.sha }}
