@@ -1,0 +1,62 @@
+name: Notify
+
+# Mikrus dopisuje powiadomienia (notify/*.json) do gałęzi `notify` PRYWATNEGO repo (studio/notify.py). Tu, co 10 min:
+# pełna treść -> zgłoszenie/komentarz w prywatnym repo; w tym publicznym repo tylko krótkie zgłoszenie
+# z ogólnym tytułem i linkiem (tworzy je bot, więc GitHub wysyła właścicielowi e-mail). Po obsłużeniu gałąź
+# `notify` jest usuwana, więc nic nie wyjdzie dwa razy.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: notify
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Powiadomienie
+        env:
+          STUDIO: qberto1988/deephouse-studio
+          PRIV: ${{ secrets.STUDIO_REPO_TOKEN }}
+          PUB: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.repository }}
+        run: |
+          git init -q n && cd n
+          git remote add origin "https://x-access-token:${PRIV}@github.com/${STUDIO}.git"
+          git fetch -q --depth 1 origin notify 2>/dev/null || { echo "brak powiadomien"; exit 0; }
+          SHA=$(git rev-parse FETCH_HEAD)
+          git checkout -q FETCH_HEAD
+          for F in notify.json notify/*.json; do
+            [ -f "$F" ] || continue
+            KIND=$(jq -r .kind "$F"); SUBJ=$(jq -r .subject "$F"); jq -r .body "$F" > /tmp/body.md
+            if [ "$KIND" = "digest" ]; then
+              N=$(GH_TOKEN=$PRIV gh issue list --repo "$STUDIO" --label dziennik --state all --limit 1 --json number -q '.[0].number')
+              if [ -z "$N" ]; then
+                GH_TOKEN=$PRIV gh label create dziennik --repo "$STUDIO" --color 0e8a16 2>/dev/null || true
+                GH_TOKEN=$PRIV gh issue create --repo "$STUDIO" --title "Dziennik studia" --label dziennik --body "Codzienne podsumowania studia." > /dev/null
+                N=$(GH_TOKEN=$PRIV gh issue list --repo "$STUDIO" --label dziennik --state all --limit 1 --json number -q '.[0].number')
+              fi
+              printf '### %s\n\n' "$SUBJ" | cat - /tmp/body.md > /tmp/c.md
+              URL=$(GH_TOKEN=$PRIV gh issue comment "$N" --repo "$STUDIO" --body-file /tmp/c.md)
+            else
+              GH_TOKEN=$PRIV gh label create powiadomienie --repo "$STUDIO" --color d93f0b 2>/dev/null || true
+              URL=$(GH_TOKEN=$PRIV gh issue create --repo "$STUDIO" --title "$SUBJ" --label powiadomienie --body-file /tmp/body.md)
+            fi
+            # E-mail: krótkie zgłoszenie bota w tym repo (bez treści - szczegóły tylko w prywatnym linku).
+            GH_TOKEN=$PUB gh issue create --repo "$REPO" --title "Studio: nowe powiadomienie ($(date -u +%d.%m\ %H:%M) UTC)" \
+              --body "Szczegóły (prywatne): $URL
+
+          @$OWNER" > /dev/null
+          done
+          # Usunięcie tylko obsłużonej wersji gałęzi: powiadomienie dopisane w międzyczasie zostaje na następny przebieg.
+          git push -q --force-with-lease=notify:$SHA origin :notify || echo "doszły nowe powiadomienia"
+          echo "wyslano"
