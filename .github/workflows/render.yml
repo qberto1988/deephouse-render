@@ -104,7 +104,6 @@ jobs:
       - name: Scena dopasowana do muzyki
         if: steps.job.outputs.name != ''
         working-directory: studio
-        env:
         run: |
           python3 -c "import json;json.dump(json.load(open('job.json'))['music'],open('/tmp/music.json','w'))"
           for i in 1 2; do
