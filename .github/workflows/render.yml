@@ -160,7 +160,7 @@ jobs:
             git fetch -q --depth 1 origin render-results && git worktree add -q /tmp/res FETCH_HEAD -B render-results
             mkdir -p /tmp/res/results/$NAME
             if [ -n "$EP" ]; then
-              for f in manifest.json youtube.json review_sheet.jpg review_scene_1.jpg review_scene_2.jpg review_scene_3.jpg review_scene_4.jpg motion_preview.jpg thumbnail_1.jpg thumbnail_2.jpg thumbnail_3.jpg seo.json description.txt; do
+              for f in manifest.json youtube.json review_sheet.jpg review_scene_1.jpg review_scene_2.jpg review_scene_3.jpg review_scene_4.jpg review_motion.jpg motion_preview.jpg thumbnail_1.jpg thumbnail_2.jpg thumbnail_3.jpg seo.json description.txt; do
                 [ -f "$EP$f" ] && cp "$EP$f" /tmp/res/results/$NAME/
               done
             fi
