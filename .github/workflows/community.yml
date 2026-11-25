@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: read
-  models: read
 
 concurrency:
   group: community
@@ -34,10 +33,11 @@ jobs:
         env:
           YT_TOKEN_JSON: ${{ secrets.YT_TOKEN_JSON }}
           GITHUB_TOKEN: ${{ github.token }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN_1 }}
           STUDIO_REPO: qberto1988/deephouse-studio
           STUDIO_REPO_TOKEN: ${{ secrets.STUDIO_REPO_TOKEN }}
           OWNER_LOGIN: ${{ github.repository_owner }}
         run: |
-          pip install --quiet google-api-python-client google-auth requests > /dev/null 2>&1
+          pip install --quiet google-api-python-client google-auth requests gradio_client huggingface_hub numpy > /dev/null 2>&1
           python scripts/community_cloud.py > /tmp/community.log 2>&1 || { echo "cykl nieudany"; exit 1; }
           echo "ok"
