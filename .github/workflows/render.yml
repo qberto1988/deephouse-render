@@ -153,7 +153,19 @@ jobs:
         run: |
           OK=$(python3 -c "import json;m=json.load(open('${EP}manifest.json',encoding='utf-8'));print(int(bool(m['qa_passed'])))")
           if [ "$OK" = "1" ]; then
-            uv run python scripts/upload_when_allowed.py "$EP" --every 10 --hours 3 >> /tmp/log/run.log 2>&1 || echo "wysylka nieudana - Mikrus odrzuci zlecenie, muzyka wraca do puli"
+            # 26.11: odrzucone filmy (i ich Shorts) zużyły dzienny limit wysyłek YouTube, a dobry film się nie zmieścił.
+            # Czekamy do 1,5 h na decyzję nadzoru z podglądu (approvals/<zlecenie>.json na main): odrzucony = bez wysyłki.
+            DEC=""
+            for i in $(seq 1 18); do
+              git fetch -q origin main 2>/dev/null || true
+              DEC=$(git show origin/main:approvals/$NAME.json 2>/dev/null | python3 -c "import json,sys;print(int(bool(json.load(sys.stdin).get('approved'))))" 2>/dev/null || true)
+              [ -n "$DEC" ] && break
+              sleep 300
+            done
+            echo "decyzja nadzoru przed wysylka: ${DEC:-brak (wysylka prywatna do pozniejszego przegladu)}" >> /tmp/log/run.log
+            if [ "$DEC" != "0" ]; then
+              uv run python scripts/upload_when_allowed.py "$EP" --every 10 --hours 3 >> /tmp/log/run.log 2>&1 || echo "wysylka nieudana - Mikrus odrzuci zlecenie, muzyka wraca do puli"
+            fi
           fi
       - name: Odcinek radiowy 1080p -> Mikrus
         if: steps.job.outputs.name != '' && env.EP != ''
