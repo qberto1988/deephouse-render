@@ -127,6 +127,26 @@ jobs:
           EP=$(ls -td data/episodes/*/ | head -1)
           echo "EP=$EP" >> $GITHUB_ENV
           python3 -c "import json;m=json.load(open('${EP}manifest.json',encoding='utf-8'));print('QA:',m['qa_passed'])"
+      - name: Podglad do przegladu (przed wysylka)
+        # 26.11: przegląd nadzoru czekał na wgranie (limit wysyłek YouTube potrafi opóźnić je o godziny).
+        # Podgląd w results/<zlecenie>/preview/ - bez manifest.json w katalogu wyniku (Mikrus uznałby go za gotowy).
+        if: steps.job.outputs.name != '' && env.EP != ''
+        working-directory: studio
+        run: |
+          git config user.name "Studio chmura"; git config user.email "studio@localhost"
+          for i in 1 2 3; do
+            rm -rf /tmp/pre; git worktree prune
+            git fetch -q --depth 1 origin render-results && git worktree add -q /tmp/pre FETCH_HEAD -B render-results-pre
+            mkdir -p /tmp/pre/results/$NAME/preview
+            for f in review_sheet.jpg review_scene_1.jpg review_scene_2.jpg review_scene_3.jpg review_scene_4.jpg review_motion.jpg motion_preview.jpg thumbnail_1.jpg thumbnail_2.jpg thumbnail_3.jpg seo.json description.txt; do
+              [ -f "$EP$f" ] && cp "$EP$f" /tmp/pre/results/$NAME/preview/
+            done
+            [ -f "${EP}manifest.json" ] && cp "${EP}manifest.json" /tmp/pre/results/$NAME/preview/manifest_preview.json
+            tail -c 200000 /tmp/log/run.log > /tmp/pre/results/$NAME/preview/run.log 2>/dev/null || true
+            (cd /tmp/pre && git add -A && git commit -qm "Podglad $NAME" && git push -q origin HEAD:render-results) && break
+            sleep 10
+          done
+          rm -rf /tmp/pre; git worktree prune
       - name: Wysylka PRYWATNA (gdy QA 100%)
         if: steps.job.outputs.name != ''
         working-directory: studio
