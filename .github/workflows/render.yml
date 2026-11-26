@@ -112,6 +112,11 @@ jobs:
           done
           test -n "$S" || { echo "brak sceny, ktora przeszla kontrole"; exit 1; }
           echo "SCENE=$S" >> $GITHUB_ENV
+      - name: Ruch AI (realistyczne klipy sceny)
+        if: steps.job.outputs.name != ''
+        working-directory: studio
+        run: |
+          uv run python scripts/make_motion.py "$SCENE" >> /tmp/log/run.log 2>&1 || echo "ruch AI niedostepny - silnik zywego zdjecia"
       - name: Render, miks, QA
         if: steps.job.outputs.name != ''
         working-directory: studio
